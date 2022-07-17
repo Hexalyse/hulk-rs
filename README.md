@@ -1,6 +1,6 @@
 # hulk-rs
 
-HULK DoS tool ported to Rust.
+HULK DoS tool ported to Rust. HULK stands for Http Unbearable Load King
 
 This project was inspired by [hulk](https://github.com/grafov/hulk) which is a Go port of the original Python HULK tool, with some additional features. I just decided to port it to Rust as an exercice to learn Rust.
 
