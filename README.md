@@ -10,3 +10,8 @@ As with the Go port which uses goroutines instead of threads, the idea is to use
 ## Disclaimer
 
 This tool is designed to be used as a stress testing utility, and may lead to complete Denial of Service if used on a badly configured server/application. Use it carefully and responsibly.
+
+## TODO
+
+- Add possibility to load a list of user agents from a file
+- Add possibility to "fuzz" a specific GET parameters, instead of fuzzing the parameter key too
