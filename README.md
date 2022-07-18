@@ -18,4 +18,3 @@ Just run `cargo build --release` in the root of the repository, and the built ex
 ## TODO
 
 - Add possibility to load a list of user agents from a file
-- Add possibility to "fuzz" a specific GET parameters, instead of fuzzing the parameter key too

