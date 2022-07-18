@@ -1,5 +1,5 @@
 [package]
-name = "hulk-rs"
+name = "hulk"
 version = "1.0.0"
 edition = "2021"
 
