@@ -85,7 +85,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     } else {
         USER_AGENTS.iter().map(|x| x.to_string()).collect()
     };
-    println!("{:?}", user_agents);
     println!("[*] Starting HULK attack on {}", args.target);
     let tasks = (0..args.max_connections).map(|x| {
         let target = args.target.clone();
