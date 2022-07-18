@@ -15,6 +15,7 @@ use std::{
 
 static REQ_COUNT: AtomicUsize = AtomicUsize::new(0);
 static ERR_COUNT: AtomicUsize = AtomicUsize::new(0);
+static FAIL_COUNT: AtomicUsize = AtomicUsize::new(0);
 static USER_AGENTS: &'static [&'static str] = &[
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:96.0) Gecko/20100101 Firefox/96.0",
@@ -138,9 +139,17 @@ async fn fetch_url(
         let request = Request::get(uri)
             .header("User-Agent", user_agent)
             .header("Referer", referer)
-            .body(Body::empty())?;
+            .body(Body::empty()).unwrap();
 
-        let mut resp = client.request(request).await?;
+        let resp = client.request(request).await;
+        // Do not return on error, to allow keeping the max number of tasks running
+        let mut resp = match resp {
+            Ok(resp) => resp,
+            Err(_) => {
+                FAIL_COUNT.fetch_add(1, Ordering::Relaxed);
+                continue;
+            }
+        };
         if resp.status() != hyper::StatusCode::OK {
             if verbose {
                 println!("\n[!] Error: {}", resp.status());
@@ -158,8 +167,8 @@ async fn fetch_url(
                 0
             };
             print!(
-                "\r[*] {} requests | {} OK | {} errors",
-                total_reqs, ok_count, err_count
+                "\r[*] {} requests | {} OK | {} server errors | {} failed requests",
+                total_reqs, ok_count, err_count, FAIL_COUNT.load(Ordering::Relaxed)
             );
             io::stdout().flush().unwrap();
         }
