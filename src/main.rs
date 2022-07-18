@@ -5,11 +5,13 @@ use hyper::{Body, Client, Request};
 use hyper_tls::HttpsConnector;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-use std::{io, 
-    fs::File,
-    io::{prelude::*, BufReader, Write},
-    path::Path,};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{
+    fs::File,
+    io,
+    io::{prelude::*, BufReader, Write},
+    path::Path,
+};
 
 static REQ_COUNT: AtomicUsize = AtomicUsize::new(0);
 static ERR_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -49,11 +51,12 @@ struct CliArguments {
     user_agents_file: Option<String>,
     /// Name of a GET parameter to add to the request (the value will be fuzzed, instead of fuzzing both the name of a GET parameter and its value)
     #[clap(short, takes_value = true, required = false)]
-    parameter_name: Option<String>, 
+    parameter_name: Option<String>,
 }
 
 fn lines_from_file(filename: impl AsRef<Path> + std::marker::Copy) -> Vec<String> {
-    let file = File::open(filename).expect(format!("No such file: {}", filename.as_ref().display()).as_str());
+    let file = File::open(filename)
+        .expect(format!("No such file: {}", filename.as_ref().display()).as_str());
     let buf = BufReader::new(file);
     buf.lines()
         .map(|l| l.expect("Could not parse line"))
@@ -88,7 +91,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let target = args.target.clone();
         let parameter_name = args.parameter_name.clone();
         let user_agents = user_agents.clone();
-        tokio::spawn(async move { fetch_url(target, args.verbose, parameter_name, user_agents, x).await })
+        tokio::spawn(async move {
+            fetch_url(target, args.verbose, parameter_name, user_agents, x).await
+        })
     });
     join_all(tasks).await;
 
@@ -107,9 +112,23 @@ async fn fetch_url(
     let user_agents_len = user_agents.len();
     loop {
         let uri = if target.contains("?") {
-            format!("{}&{}={}", target, parameter_name.as_deref().unwrap_or(random_string(10).as_str()), random_string(10))
+            format!(
+                "{}&{}={}",
+                target,
+                parameter_name
+                    .as_deref()
+                    .unwrap_or(random_string(10).as_str()),
+                random_string(10)
+            )
         } else {
-            format!("{}?{}={}", target, parameter_name.as_deref().unwrap_or(random_string(10).as_str()), random_string(10))
+            format!(
+                "{}?{}={}",
+                target,
+                parameter_name
+                    .as_deref()
+                    .unwrap_or(random_string(10).as_str()),
+                random_string(10)
+            )
         };
         let referer = format!(
             "{}{}",
@@ -118,10 +137,7 @@ async fn fetch_url(
         );
         let user_agent = user_agents[rand::thread_rng().gen_range(0..user_agents_len)].clone();
         let request = Request::get(uri)
-            .header(
-                "User-Agent",
-                user_agent
-            )
+            .header("User-Agent", user_agent)
             .header("Referer", referer)
             .body(Body::empty())?;
 
