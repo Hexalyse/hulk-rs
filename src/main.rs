@@ -158,7 +158,7 @@ async fn fetch_url(
                 continue;
             }
         };
-        if resp.status() != hyper::StatusCode::OK {
+        if resp.status().as_u16() >= 400 {
             if verbose {
                 println!("\n[!] Error: {}", resp.status());
             }
