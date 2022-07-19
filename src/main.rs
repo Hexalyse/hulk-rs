@@ -167,10 +167,11 @@ async fn fetch_url(
         let total_reqs = REQ_COUNT.fetch_add(1, Ordering::Relaxed);
         if total_reqs % 10 == 0 {
             let err_count = ERR_COUNT.load(Ordering::Relaxed);
+            let fail_count = FAIL_COUNT.load(Ordering::Relaxed);
             // sometimes the error count is higher than total requests
             // so we need to check for that not to get a substract with overflow
-            let ok_count = if total_reqs >= err_count {
-                total_reqs - err_count
+            let ok_count = if total_reqs >= err_count + fail_count {
+                total_reqs - (err_count + fail_count)
             } else {
                 0
             };
