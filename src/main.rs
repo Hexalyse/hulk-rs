@@ -137,12 +137,12 @@ async fn fetch_url(
         };
         let referer = format!(
             "{}{}",
-            referers[rand::thread_rng().gen_range(0..referers_len)],
-            random_string(rand::thread_rng().gen_range(5..10))
+            referers[thread_rng().gen_range(0..referers_len)],
+            random_string(thread_rng().gen_range(5..10))
         );
         // I need to clone this, otherwise I get borrowing issues.
         // I'm new to Rust and there might be a cleaner way to do this. Feel free to submit a PR.
-        let user_agent = user_agents[rand::thread_rng().gen_range(0..user_agents_len)].clone();
+        let user_agent = user_agents[thread_rng().gen_range(0..user_agents_len)].clone();
 
         let request = Request::get(uri)
             .header("User-Agent", user_agent)
@@ -169,7 +169,7 @@ async fn fetch_url(
         if total_reqs % 10 == 0 {
             let err_count = ERR_COUNT.load(Ordering::Relaxed);
             let fail_count = FAIL_COUNT.load(Ordering::Relaxed);
-            // sometimes the error count is higher than total requests
+            // sometimes the error count is higher than total requests (I don't get it, it also happens with SeqCst ordering)
             // so we need to check for that not to get a substract with overflow
             let ok_count = if total_reqs >= err_count + fail_count {
                 total_reqs - (err_count + fail_count)
@@ -181,9 +181,9 @@ async fn fetch_url(
                 total_reqs,
                 ok_count,
                 err_count,
-                FAIL_COUNT.load(Ordering::Relaxed)
+                fail_count
             );
-            io::stdout().flush().unwrap();
+            io::stdout().flush().ok();
         }
 
         resp.body_mut().data().await;
