@@ -144,12 +144,12 @@ async fn fetch_url(
         // I'm new to Rust and there might be a cleaner way to do this. Feel free to submit a PR.
         let user_agent = user_agents[thread_rng().gen_range(0..user_agents_len)].clone();
 
+        let total_reqs = REQ_COUNT.fetch_add(1, Ordering::Relaxed);
         let request = Request::get(uri)
             .header("User-Agent", user_agent)
             .header("Referer", referer)
             .body(Body::empty())
             .unwrap();
-
         let resp = client.request(request).await;
         // Do not return on error, to allow keeping the max number of tasks running
         let mut resp = match resp {
@@ -165,7 +165,6 @@ async fn fetch_url(
             }
             ERR_COUNT.fetch_add(1, Ordering::Relaxed);
         }
-        let total_reqs = REQ_COUNT.fetch_add(1, Ordering::Relaxed);
         if total_reqs % 10 == 0 {
             let err_count = ERR_COUNT.load(Ordering::Relaxed);
             let fail_count = FAIL_COUNT.load(Ordering::Relaxed);
