@@ -7,6 +7,11 @@ I just decided to port it to Rust as an exercice to learn Rust.
 
 As with the Go port which uses goroutines instead of threads, the idea is to use [tokio](https://github.com/tokio-rs/tokio) tasks which should give similar performance as goroutines.
 
+## What does it do ?
+
+HULK works by appending a GET parameter with random name and value to the provided URL (hulk-rs also provide an option to choose a fixed name for this GET parameter). It also randomizes the User-Agent and the Referer HTTP headers.    
+The goal is to "bypass" eventual caching mechanisms, leading to the request being directed to the backend every single time, which can lead to resource loads sometimes >100x greater on the machine than when serving a static cached version of the page. This allows even a single machine with a slow-ish internet connection to create a Denial of Service on big, badly configured servers.
+
 ## Disclaimer
 
 This tool is designed to be used as a stress testing utility, and may lead to complete Denial of Service if used on a badly configured server/application. Use it carefully and responsibly.
