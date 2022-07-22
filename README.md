@@ -14,7 +14,7 @@ The goal is to "bypass" eventual caching mechanisms, leading to the request bein
 
 ## Disclaimer
 
-This tool is designed to be used as a stress testing utility, and may lead to complete Denial of Service if used on a badly configured server/application. Use it carefully and responsibly.
+This tool is designed to be used as a stress testing utility to test the resilience of a server to such type of DoS attacks, and may lead to complete Denial of Service if used on a badly configured server/application. Use it carefully and responsibly.
 
 ## How to build
 
