@@ -16,7 +16,7 @@ use std::{
 static REQ_COUNT: AtomicUsize = AtomicUsize::new(0);
 static ERR_COUNT: AtomicUsize = AtomicUsize::new(0);
 static FAIL_COUNT: AtomicUsize = AtomicUsize::new(0);
-static USER_AGENTS: &'static [&'static str] = &[
+static USER_AGENTS: &[&str] = &[
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:96.0) Gecko/20100101 Firefox/96.0",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
@@ -30,7 +30,7 @@ static USER_AGENTS: &'static [&'static str] = &[
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:96.0) Gecko/20100101 Firefox/96.0",
     ];
-static REFERERS: &'static [&'static str] = &[
+static REFERERS: &[&str] = &[
     "https://www.google.com/?q=",
     "https://bing.com/search?q=",
     "https://yandex.ru/yandsearch?text=",
@@ -60,7 +60,7 @@ struct CliArguments {
 
 fn lines_from_file(filename: impl AsRef<Path> + std::marker::Copy) -> Vec<String> {
     let file = File::open(filename)
-        .expect(format!("No such file: {}", filename.as_ref().display()).as_str());
+        .unwrap_or_else(|_| panic!("No such file: {}", filename.as_ref().display()));
     let buf = BufReader::new(file);
     buf.lines()
         .map(|l| l.expect("Could not parse line"))
@@ -116,7 +116,7 @@ async fn fetch_url(
     let user_agents_len = user_agents.len();
     let referers_len = referers.len();
     loop {
-        let uri = if target.contains("?") {
+        let uri = if target.contains('?') {
             format!(
                 "{}&{}={}",
                 target,
