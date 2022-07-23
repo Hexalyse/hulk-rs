@@ -11,6 +11,9 @@ repository = "https://github.com/Hexalyse/hulk-rs"
 keywords = ["dos", "hulk", "infosec"]
 categories = ["command-line-utilities"]
 
+[[bin]]
+name = "hulk"
+
 [dependencies]
 clap = { version = "3.0", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
