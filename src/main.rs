@@ -168,6 +168,7 @@ async fn fetch_url(
         if total_reqs % 10 == 0 {
             let err_count = ERR_COUNT.load(Ordering::Relaxed);
             let fail_count = FAIL_COUNT.load(Ordering::Relaxed);
+            let total_reqs = REQ_COUNT.fetch_add(1, Ordering::Relaxed);
             // sometimes the error count is higher than total requests (I don't get it, it also happens with SeqCst ordering)
             // so we need to check for that not to get a substract with overflow
             let ok_count = if total_reqs >= err_count + fail_count {
