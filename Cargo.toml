@@ -2,7 +2,7 @@
 name = "hulk-rs"
 version = "1.2.2"
 edition = "2021"
-authors = ["Hexalyse"]
+authors = ["Hexalyse <hexalyse@protonmail.com>"]
 license = "GPL-3.0"
 description = "HULK DoS tool ported to Rust with additional features"
 readme = "README.md"
