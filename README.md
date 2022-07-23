@@ -16,7 +16,11 @@ The goal is to "bypass" eventual caching mechanisms, leading to the request bein
 
 This tool is designed to be used as a stress testing utility to test the resilience of a server to such type of DoS attacks, and may lead to complete Denial of Service if used on a badly configured server/application. Use it carefully and responsibly.
 
-## How to build
+## How to install
+
+You can install this tool directly with [cargo](https://doc.rust-lang.org/cargo/). Just run `cargo install hulk-rs`.
+
+## How to build from source
 
 Just run `cargo build --release` in the root of the repository, and the built executable should be in `target/release/`.
 
