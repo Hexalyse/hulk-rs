@@ -9,6 +9,7 @@ readme = "README.md"
 homepage = "https://github.com/Hexalyse/hulk-rs"
 repository = "https://github.com/Hexalyse/hulk-rs"
 keywords = ["dos", "hulk", "infosec"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 clap = { version = "3.0", features = ["derive"] }
