@@ -28,7 +28,7 @@ Just run `cargo build --release` in the root of the repository, and the built ex
 
 ```
 USAGE:
-    hulk [OPTIONS] <TARGET>
+    hulk-rs [OPTIONS] <TARGET>
 
 ARGS:
     <TARGET>    Target URL (eg. http://example.com)
@@ -48,9 +48,9 @@ OPTIONS:
 Examples:
 
 Most simple usage:    
-`hulk https://example.com/`
+`hulk-rs https://example.com/`
 
 Target a specific GET parameter (the parameter will be APPENDED to the given target URL), with only 100 concurrent connections, with User-Agents loaded from a file:    
-`hulk -m 100 -p playername -u /path/to/user_agents_file http://example.com/game.php?action=newgame`    
+`hulk-rs -m 100 -p playername -u /path/to/user_agents_file http://example.com/game.php?action=newgame`    
 (the generated URLs will look like `http://example.com/game.php?action=newgame&playername=<random_string>`
 
