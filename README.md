@@ -9,8 +9,11 @@ As with the Go port which uses goroutines instead of threads, the idea is to use
 
 ## What does it do ?
 
-HULK works by appending a GET parameter with random name and value to the provided URL (hulk-rs also provide an option to choose a fixed name for this GET parameter). It also randomizes the User-Agent and the Referer HTTP headers.    
+HULK works by making each request unique so caches are less likely to serve a stored response. By default it appends a GET parameter with a random name and value to the provided URL. You can instead keep the query string from the target URL and **fuzz** selected parameter values in place (no duplicate keys). User-Agent and Referer headers are randomized on every request.
+
 The goal is to "bypass" eventual caching mechanisms, leading to the request being directed to the backend every single time, which can lead to resource loads sometimes >100x greater on the machine than when serving a static cached version of the page. This allows even a single machine with a slow-ish internet connection to create a Denial of Service on big, badly configured servers.
+
+Query editing re-serializes parameters with standard percent-encoding. That can change the original encoding (for example `+` vs `%20`), which matters for signed URLs.
 
 ## Disclaimer
 
@@ -31,26 +34,42 @@ USAGE:
     hulk-rs [OPTIONS] <TARGET>
 
 ARGS:
-    <TARGET>    Target URL (eg. http://example.com)
+    <TARGET>    Target URL, including query parameters whose values should be kept
 
 OPTIONS:
+        --bots-only              Use only bot and search-engine user agents
     -h, --help                   Print help information
-    -m <MAX_CONNECTIONS>         Maximum number of concurrent connections to the target [default:
-                                 1000]
-    -p <PARAMETER_NAME>          Name of a GET parameter to add to the request (the value will be
-                                 fuzzed, instead of fuzzing both the name of a GET parameter and its
-                                 value)
+        --include-bots           Also include bot and search-engine user agents
+    -m <MAX_CONNECTIONS>         Maximum number of concurrent connections [default: 1000]
+    -p, --fuzz <SPEC>            Query parameter to fuzz (repeatable). Specs: NAME, NAME:int,
+                                 NAME:string, NAME:string:LEN
+        --fuzz-length <LEN>      Default random string length [default: 10]
+        --fuzz-type <TYPE>       Default fuzz type: string or integer [default: string]
     -r <REFERERS_FILE>           File containing a list of Referers to use
     -u <USER_AGENTS_FILE>        File containing a list of user agents to use
-    -v, --verbose                verbose mode (display HTTP error codes)
+    -v, --verbose                Display HTTP 4xx/5xx status codes
 ```
+
+A live dashboard prints elapsed time, completed requests per second, in-flight count, status-class distribution, transport/body errors, and latency percentiles. Press Ctrl+C for a graceful stop and a final report.
+
+When `-u` is set, `--include-bots` and `--bots-only` are ignored.
 
 Examples:
 
-Most simple usage:    
+Most simple usage (classic HULK: append a random query parameter):    
 `hulk-rs https://example.com/`
 
-Target a specific GET parameter (the parameter will be APPENDED to the given target URL), with only 100 concurrent connections, with User-Agents loaded from a file:    
-`hulk-rs -m 100 -p playername -u /path/to/user_agents_file http://example.com/game.php?action=newgame`    
-(the generated URLs will look like `http://example.com/game.php?action=newgame&playername=<random_string>`
+Keep existing query params, randomize only `page` as an integer (other params stay as given):    
+`hulk-rs -p page:int "http://example.com/search?q=test&page=1&sort=name"`
 
+Fuzz `page` as an integer and `q` as a 16-character string:    
+`hulk-rs -p page:int -p q:string:16 "http://example.com/search?q=test&page=1"`
+
+100 concurrent connections, user agents from a file:    
+`hulk-rs -m 100 -u /path/to/user_agents_file http://example.com/game.php?action=newgame`
+
+Include bot user agents as well as browsers:    
+`hulk-rs --include-bots https://example.com/`
+
+Use only search/bot user agents:    
+`hulk-rs --bots-only https://example.com/`
