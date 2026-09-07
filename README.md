@@ -50,7 +50,7 @@ OPTIONS:
     -v, --verbose                Display HTTP 4xx/5xx status codes
 ```
 
-A live dashboard prints elapsed time, completed requests per second, in-flight count, status-class distribution, transport/body errors, and latency percentiles. Press Ctrl+C for a graceful stop and a final report.
+A live color dashboard (updated in place) shows request counts, HTTP status classes, transport/body-read failures, and latency to headers. 2xx is green, 3xx yellow, 4xx/5xx and transport/body errors red. Press Ctrl+C for a graceful stop and a final report.
 
 When `-u` is set, `--include-bots` and `--bots-only` are ignored.
 

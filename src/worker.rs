@@ -9,17 +9,23 @@ use rand::Rng;
 
 use crate::config::AppConfig;
 use crate::query;
+use crate::report::Dashboard;
 use crate::stats::{classify_hyper_error, Stats};
 
 /// Stop reading a response body after this many bytes so workers are not pinned to huge payloads.
 const MAX_BODY_BYTES: usize = 1024 * 1024;
 
-pub async fn run(config: Arc<AppConfig>, stats: Arc<Stats>, shutdown: Arc<AtomicBool>) {
+pub async fn run(
+    config: Arc<AppConfig>,
+    stats: Arc<Stats>,
+    shutdown: Arc<AtomicBool>,
+    dashboard: Dashboard,
+) {
     let https = HttpsConnector::new();
     let client = Client::builder().build::<_, Body>(https);
 
     while !shutdown.load(Ordering::Relaxed) {
-        send_one(&client, &config, &stats).await;
+        send_one(&client, &config, &stats, &dashboard).await;
     }
 }
 
@@ -40,6 +46,7 @@ async fn send_one(
     client: &Client<HttpsConnector<hyper::client::HttpConnector>, Body>,
     config: &AppConfig,
     stats: &Arc<Stats>,
+    dashboard: &Dashboard,
 ) {
     let _inflight = stats.begin_request();
     let started = Instant::now();
@@ -69,7 +76,11 @@ async fn send_one(
     stats.record_status(status);
     stats.record_latency(started.elapsed());
     if config.verbose && status.as_u16() >= 400 {
-        println!("\n[!] HTTP {}", status);
+        dashboard.note(format!(
+            "{} HTTP {}",
+            console::style("[!]").red().bold(),
+            console::style(status).red()
+        ));
     }
 
     match drain_body(response.body_mut()).await {

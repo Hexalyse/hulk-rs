@@ -18,6 +18,9 @@ hyper = { version = "0.14", features = ["full"] }
 rand = "0.8.5"
 hyper-tls = "0.5.0"
 url = "2"
+console = "0.15"
+comfy-table = "7"
+indicatif = "0.17"
 
 [profile.release]
 lto = true          # Enable Link Time Optimization

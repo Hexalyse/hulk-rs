@@ -72,7 +72,6 @@ pub struct Stats {
 pub struct Snapshot {
     pub elapsed: Duration,
     pub attempted: u64,
-    pub in_flight: u64,
     pub completed: u64,
     pub status_1xx: u64,
     pub status_2xx: u64,
@@ -212,7 +211,6 @@ impl Stats {
         Snapshot {
             elapsed: self.start.elapsed(),
             attempted: self.attempted.load(RELAXED),
-            in_flight: self.in_flight.load(RELAXED),
             completed: self.completed.load(RELAXED),
             status_1xx: self.status_1xx.load(RELAXED),
             status_2xx: self.status_2xx.load(RELAXED),
@@ -231,9 +229,9 @@ impl Stats {
             mean_us,
             min_us: if min_us == u64::MAX { 0 } else { min_us },
             max_us,
-            p50_us: percentile_us(&buckets, overflow, max_us, 50.0),
-            p95_us: percentile_us(&buckets, overflow, max_us, 95.0),
-            p99_us: percentile_us(&buckets, overflow, max_us, 99.0),
+            p50_us: percentile_us(&buckets, overflow, min_us, max_us, 50.0),
+            p95_us: percentile_us(&buckets, overflow, min_us, max_us, 95.0),
+            p99_us: percentile_us(&buckets, overflow, min_us, max_us, 99.0),
         }
     }
 }
@@ -242,18 +240,26 @@ fn bucket_index(us: u64) -> Option<usize> {
     LATENCY_BOUNDS_US.iter().position(|bound| us <= *bound)
 }
 
-fn percentile_us(buckets: &[u64], overflow: u64, max_us: u64, p: f64) -> u64 {
+fn percentile_us(buckets: &[u64], overflow: u64, min_us: u64, max_us: u64, p: f64) -> u64 {
+    let min_us = if min_us == u64::MAX { 0 } else { min_us };
     let total: u64 = buckets.iter().sum::<u64>().saturating_add(overflow);
-    if total == 0 {
+    if total == 0 || max_us == 0 {
         return 0;
     }
     let rank = ((p / 100.0) * total as f64).ceil().max(1.0) as u64;
-    let mut acc = 0;
+    let mut acc = 0u64;
+    let mut lower = 0u64;
     for (i, count) in buckets.iter().enumerate() {
-        acc += count;
-        if acc >= rank {
-            return LATENCY_BOUNDS_US[i];
+        let upper = LATENCY_BOUNDS_US[i];
+        if *count > 0 && acc + count >= rank {
+            let frac = (rank.saturating_sub(acc) as f64) / (*count as f64);
+            let lo = lower.max(min_us);
+            let hi = upper.min(max_us).max(lo);
+            let value = lo as f64 + (hi - lo) as f64 * frac.clamp(0.0, 1.0);
+            return (value.round() as u64).clamp(min_us, max_us);
         }
+        acc += count;
+        lower = upper;
     }
     max_us
 }

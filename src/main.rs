@@ -16,6 +16,7 @@ use clap::Parser;
 use cli::CliArguments;
 use config::AppConfig;
 use error::AppError;
+use report::Dashboard;
 use stats::Stats;
 
 #[tokio::main]
@@ -36,24 +37,38 @@ async fn run() -> Result<(), AppError> {
     let shutdown = Arc::new(AtomicBool::new(false));
 
     println!(
-        "[*] Starting HULK attack on {} ({} workers)",
-        config.target, config.max_connections
+        "{} Starting HULK on {} ({} workers)",
+        console::style("[*]").cyan().bold(),
+        config.target,
+        config.max_connections
     );
     if !config.query.fuzz.is_empty() {
         let names: Vec<&str> = config.query.fuzz.iter().map(|p| p.name.as_str()).collect();
-        println!("[*] Fuzzing query params: {}", names.join(", "));
+        println!(
+            "{} Fuzzing query params: {}",
+            console::style("[*]").cyan().bold(),
+            names.join(", ")
+        );
     }
 
+    let dashboard = Dashboard::new();
     let mut join_set = tokio::task::JoinSet::new();
     for _ in 0..config.max_connections {
         join_set.spawn(worker::run(
             Arc::clone(&config),
             Arc::clone(&stats),
             Arc::clone(&shutdown),
+            dashboard.clone(),
         ));
     }
 
-    let reporter = tokio::spawn(report::run_live(Arc::clone(&stats), Arc::clone(&shutdown)));
+    let reporter = tokio::spawn({
+        let dashboard = dashboard.clone();
+        let stats = Arc::clone(&stats);
+        let config = Arc::clone(&config);
+        let shutdown = Arc::clone(&shutdown);
+        async move { dashboard.run_live(stats, config, shutdown).await }
+    });
 
     let mut panics = 0usize;
     let interrupt = wait_for_interrupt();
@@ -61,7 +76,10 @@ async fn run() -> Result<(), AppError> {
     loop {
         tokio::select! {
             _ = &mut interrupt => {
-                println!("\n[*] Ctrl+C received, stopping workers...");
+                dashboard.note(format!(
+                    "{} Ctrl+C received, stopping workers...",
+                    console::style("[*]").cyan().bold()
+                ));
                 break;
             }
             result = join_set.join_next() => {
@@ -69,7 +87,10 @@ async fn run() -> Result<(), AppError> {
                     None => break,
                     Some(Err(err)) if err.is_panic() => {
                         panics += 1;
-                        println!("\n[!] Worker task panicked, stopping...");
+                        dashboard.note(format!(
+                            "{} Worker task panicked, stopping...",
+                            console::style("[!]").red().bold()
+                        ));
                         break;
                     }
                     Some(_) => {}
@@ -83,7 +104,8 @@ async fn run() -> Result<(), AppError> {
     panics += drain_workers(&mut join_set).await;
     reporter.abort();
     let _ = reporter.await;
-    report::print_final(&stats);
+    dashboard.finish();
+    report::print_final(&stats, &config);
 
     if panics > 0 {
         Err(AppError::WorkerPanics(panics))
