@@ -50,15 +50,20 @@ async fn run() -> Result<(), AppError> {
             names.join(", ")
         );
     }
+    if let Some(warning) = query::reserialize_warning(&config.target) {
+        println!("{} {warning}", console::style("[!]").yellow().bold());
+    }
 
+    let client = worker::build_client();
     let dashboard = Dashboard::new();
     let mut join_set = tokio::task::JoinSet::new();
-    for _ in 0..config.max_connections {
+    for worker_id in 0..config.max_connections {
         join_set.spawn(worker::run(
+            client.clone(),
             Arc::clone(&config),
             Arc::clone(&stats),
             Arc::clone(&shutdown),
-            dashboard.clone(),
+            worker_id,
         ));
     }
 

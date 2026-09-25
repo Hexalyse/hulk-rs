@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use hyper::header::HeaderValue;
 use url::Url;
@@ -18,13 +19,20 @@ pub struct AppConfig {
     pub verbose: bool,
     pub user_agents: Arc<[String]>,
     pub referers: Arc<[String]>,
+    pub referers_exact: bool,
     pub query: QueryPlan,
+    pub header_timeout: Duration,
+    pub timeout: Duration,
+    pub max_body: usize,
 }
 
 impl AppConfig {
     pub fn from_cli(args: CliArguments) -> Result<Self, AppError> {
         if args.max_connections == 0 {
             return Err(AppError::InvalidMaxConnections);
+        }
+        if args.timeout < args.header_timeout {
+            return Err(AppError::InvalidTimeout);
         }
 
         query::validate_fuzz_length(args.fuzz_length)?;
@@ -59,11 +67,15 @@ impl AppConfig {
             verbose: args.verbose,
             user_agents: user_agents.into(),
             referers: referers.into(),
+            referers_exact: args.referers_exact,
             query: QueryPlan {
                 fuzz,
                 cache_bust,
                 default_length: args.fuzz_length,
             },
+            header_timeout: args.header_timeout,
+            timeout: args.timeout,
+            max_body: args.max_body,
         })
     }
 }
@@ -127,4 +139,40 @@ fn validate_header_values(what: &'static str, values: &[String]) -> Result<(), A
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use crate::cli::CliArguments;
+    use crate::error::AppError;
+    use crate::query::FuzzKind;
+
+    use super::*;
+
+    fn args(header_timeout: Duration, timeout: Duration) -> CliArguments {
+        CliArguments {
+            max_connections: 1,
+            target: "http://example.com/".to_string(),
+            verbose: false,
+            user_agents_file: None,
+            fuzz: Vec::new(),
+            fuzz_type: FuzzKind::String,
+            fuzz_length: 10,
+            referers_file: None,
+            referers_exact: false,
+            include_bots: false,
+            bots_only: false,
+            header_timeout,
+            timeout,
+            max_body: 1024,
+        }
+    }
+
+    #[test]
+    fn rejects_timeout_shorter_than_header_timeout() {
+        let err = AppConfig::from_cli(args(Duration::from_secs(30), Duration::from_secs(10)));
+        assert!(matches!(err, Err(AppError::InvalidTimeout)));
+    }
 }

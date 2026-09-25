@@ -36,6 +36,7 @@ pub enum AppError {
     },
     InvalidFuzzLength(usize),
     InvalidMaxConnections,
+    InvalidTimeout,
     WorkerPanics(usize),
 }
 
@@ -78,6 +79,12 @@ impl fmt::Display for AppError {
             }
             Self::InvalidMaxConnections => {
                 write!(f, "maximum connections must be at least 1")
+            }
+            Self::InvalidTimeout => {
+                write!(
+                    f,
+                    "--timeout must be greater than or equal to --header-timeout"
+                )
             }
             Self::WorkerPanics(n) => {
                 write!(f, "{n} worker task(s) panicked")

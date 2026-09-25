@@ -1,6 +1,6 @@
 [package]
 name = "hulk-rs"
-version = "1.3.0"
+version = "1.4.0"
 edition = "2021"
 authors = ["Hexalyse <hexalyse@protonmail.com>"]
 license = "GPL-3.0"
@@ -12,15 +12,18 @@ keywords = ["dos", "hulk", "infosec"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-clap = { version = "3.0", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
-hyper = { version = "0.14", features = ["full"] }
-rand = "0.8.5"
-hyper-tls = "0.5.0"
-url = "2"
-console = "0.15"
+bytes = "1"
+clap = { version = "4", features = ["derive", "cargo"] }
 comfy-table = "7"
-indicatif = "0.17"
+console = "0.15"
+hdrhistogram = "7"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-tls = "0.6"
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
+rand = "0.8.5"
+tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "time"] }
+url = "2"
 
 [profile.release]
 lto = true          # Enable Link Time Optimization
